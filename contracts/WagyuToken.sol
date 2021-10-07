@@ -92,10 +92,10 @@ contract WAG is IERC20, OwnableUpgradeSafe, LGEWhitelisted {
 		
 		_balances[sender] = _balances[sender].sub(amount, "ERC20: transfer amount exceeds balance");
 		
-        console.log(recipient);
-        console.log("sender", sender);
-        console.log(_pair[recipient]);
-        console.log(!_feeExcluded[sender]);
+        // console.log(recipient);
+        // console.log("sender", sender);
+        // console.log(_pair[recipient]);
+        // console.log(!_feeExcluded[sender]);
 
 		if(_pair[recipient] && !_feeExcluded[sender]) {
 			
@@ -134,14 +134,14 @@ contract WAG is IERC20, OwnableUpgradeSafe, LGEWhitelisted {
 				}
 				
 			}
-			console.log("checking fee", feeRewardAmount == 1000E18);
+			// console.log("checking fee", feeRewardAmount == 1000E18);
 			amount = amount.sub(feeRewardAmount);
-            console.log("checking amount", amount == 9000E18);
+            // console.log("checking amount", amount == 9000E18);
 			
 		}
         _balances[recipient] = _balances[recipient].add(amount);
-        console.log("checking amount", amount == 9000E18);
-        console.log(_balances[recipient] == 109000E18);
+        // console.log("checking amount", amount == 9000E18);
+        // console.log(_balances[recipient] == 109000E18);
         emit Transfer(sender, recipient, amount);
     }
 
@@ -192,6 +192,12 @@ contract WAG is IERC20, OwnableUpgradeSafe, LGEWhitelisted {
 
     function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
         _approve(_msgSender(), spender, _allowances[_msgSender()][spender].sub(subtractedValue, "ERC20: decreased allowance below zero"));
+        return true;
+    }
+
+    // Helper function to access _burn function
+    function burn(uint256 amount) public virtual returns (bool) {
+        _burn(_msgSender(), amount);
         return true;
     }
 

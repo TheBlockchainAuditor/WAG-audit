@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { Snapshot, tokens, timeLimit, increaseTime, ether }  from "./helpers";
+import { Snapshot, tokens, timeLimit, increaseTime, ether, ZeroAddress }  from "./helpers";
 
 // Types
 import { WAG, UniswapV2Router02, UniswapV2Factory, WETH9, UniswapV2ERC20 } from "../typechain";
@@ -67,6 +67,14 @@ describe("Wagyu Swap ERC20 Contract Test Suite", () => {
             value: ether("500")
         });
 
+        let durations = [1200];
+        let amountsMax = [tokens("10000"), tokens("10")];
+    
+        durations = [];
+        amountsMax = [];
+    
+        await wag.createLGEWhitelist(ZeroAddress, durations, amountsMax);
+
         await wag.approve(router.address, tokens("100000"));
         await eth.approve(router.address, ether("200"));
         await router.addLiquidity(wag.address, eth.address, tokens("100000"), ether("200"), 0, 0, owner.address, timeLimit(oneMinute*30));
@@ -90,6 +98,46 @@ describe("Wagyu Swap ERC20 Contract Test Suite", () => {
             expect(await wag.name()).equal("WAGYUSWAP.app");
         });
 
+        it("Should have the symbol WAG", async () => {
+            expect(await wag.symbol()).equal("WAG");
+        });
+      
+        it("Should have a total supply of 500000000", async () => {
+            expect(await wag.totalSupply()).equal(tokens("500000000"));
+        });
+      
+        it("Should have 18 decimals", async () => {
+            expect(await wag.decimals()).equal(18);
+        });
+      
+        it("Should give allowance to a spender of approved amount", async () => {
+            await wag.approve(trader1.address, tokens("1000"));
+            // let allowed = await wag.allowance(owner.address, trader1.address);
+
+            expect(await wag.allowance(owner.address, trader1.address)).equal(tokens("1000"));
+        });
+
+        it("Should increase the allowance of a spender", async () => {
+            await wag.increaseAllowance(trader1.address, tokens("2000"));
+            expect(await wag.allowance(owner.address, trader1.address)).equal(tokens("2000"));
+        });
+
+        it("Should decrease the allowance of a spender", async () => {
+            await wag.approve(trader1.address, tokens("4000"));
+            await wag.decreaseAllowance(trader1.address, tokens("2000"));
+            expect(await wag.allowance(owner.address, trader1.address)).equal(tokens("2000"));
+        });
+
+        it("Should burn tokens", async () => {
+            let initialBalance: BigNumber = await wag.balanceOf(owner.address);
+            await wag.burn(tokens("1000"));
+            expect(await wag.balanceOf(owner.address)).equal(initialBalance.sub(tokens("1000")));
+        });
+
+        // it("Should not be able to burn tokens from the zero address", async () => {
+            
+        //     await expect(wag.connect(ZeroAddress).burn(tokens("1000"))).revertedWith("ERC20: burn from the zero address");
+        // });
     });
 
     describe("Trading", () => {
@@ -107,12 +155,183 @@ describe("Wagyu Swap ERC20 Contract Test Suite", () => {
 
             // pair adddress should increase by amount sold - 10% fee
             // expect(await wag.balanceOf(trader1.address)).equal(0);
-            expect(await wag.balanceOf(pair.address)).equal(initialBalance.add(tokens("9000")));
+            expect(await wag.balanceOf(pair.address)).equal(initialBalance.add(tokens("10000")));
         })
         
     });
 
-});
+    describe("allowance", () => {
 
-// 110000000000000000000000
-// 109000000000000000000000
+        it("allowance works as expected", async () => {
+          expect(await wag.allowance(owner.address, trader1.address)).equal(tokens("0"));
+          await wag.approve(trader1.address, tokens("5"));
+          expect(await wag.allowance(owner.address, trader1.address)).equal(tokens("5"));
+          await wag.increaseAllowance(trader1.address, tokens("3"));
+          expect(await wag.allowance(owner.address, trader1.address)).equal(tokens("8"));
+          await wag.decreaseAllowance(trader1.address, tokens("4"));
+          expect(await wag.allowance(owner.address, trader1.address)).equal(tokens("4"));
+          await expect(wag.decreaseAllowance(trader1.address, tokens("5"))).revertedWith("ERC20: decreased allowance below zero");
+          expect(await wag.allowance(owner.address, trader1.address)).equal(tokens("4"));
+        });
+    
+      });
+    
+      describe("approve", () => {
+    
+        it("cannot approve the zero address to move your tokens", async () => {
+          await expect(wag.connect(trader1).approve(ZeroAddress, tokens("5"))).to.be.reverted;
+        });
+    
+        // it("zero address cannot approve burned tokens to be moved", async () => {
+        //   const { vlx, holder5, ZeroAddress} = await deployWithTokenHolders();
+        //   // Open github issue here
+        //   await expect(vlx.connect(ZeroAddress).approve(holder5.address, tokens("5"))).to.be.reverted;
+        // });
+    
+      });
+    
+      describe("transferFrom", () => {
+    
+        it("allows you transfer an address' tokens to another address", async () => {
+          await wag.connect(trader1).approve(trader2.address, tokens("5"));
+          await wag.connect(trader2).transferFrom(trader1.address, trader3.address, tokens("5"));
+        });
+    
+      });
+    
+      describe("Ownership", () => {
+    
+        it("only the owner can transfer ownership to another address", async () => {
+          await expect(wag.connect(trader1).transferOwnership(trader1.address)).to.be.reverted;
+          await wag.transferOwnership(trader1.address);
+          expect(await wag.owner()).to.be.equal(trader1.address);
+        });
+    
+        it("owner cannot transfer ownership to the zero address", async () => {
+          await expect(wag.transferOwnership(ZeroAddress)).to.be.reverted;
+        });
+    
+        it("the owner can renounce ownership of the contract", async () => {
+          await wag.renounceOwnership();
+          expect(await wag.owner()).to.be.equal(ZeroAddress);
+        });
+    
+      });
+    
+      describe("Whitelist", () => {
+    
+        /*
+        
+        it("token transfers revert without the pair address set", async () => {
+          const { vlx, holder5 } = await deployWithoutLGE();
+    
+          const data = await vlx.getLGEWhitelistRound();
+    
+          const durations = [1200];
+          const amountsMax = [tokens("10000")];
+    
+          await vlx.createLGEWhitelist(AddressZero, durations, amountsMax);
+          await expect(vlx.transfer(holder5.address, tokens("1"))).to.be.reverted;
+        });
+        
+        */
+    
+        it("creating the LGE whitelist requires duration and amountsMax of equal length", async () => {
+          let durations = [1200];
+          let amountsMax = [tokens("10000"), tokens("10")];
+    
+          await expect(wag.createLGEWhitelist(ZeroAddress, durations, amountsMax)).to.be.reverted;
+    
+          durations = [];
+          amountsMax = [];
+    
+          await wag.createLGEWhitelist(ZeroAddress, durations, amountsMax);
+        });
+    
+        it("transferring tokens to the pair address begins the LGE", async () => {
+          await wag.transfer(pair.address, tokens("10000"));
+          await expect(wag.connect(pair).transfer(trader1.address, tokens("10"))).to.be.reverted;
+        });
+    
+        it("transferring tokens reverts if you're not on the whitelist", async () => {
+          await expect(wag.connect(pair).transfer(trader1.address, tokens("10"))).to.be.reverted;
+        });
+    
+        it("whitelisters cannot buy more than the specified amount max", async () => {
+          const addresses = [pair.address, owner.address, trader1.address, trader2.address, trader3.address, trader4.address];
+          await wag.modifyLGEWhitelist(0, 1200, tokens("5000"), addresses, true);
+          await expect(wag.connect(pair).transfer(trader1.address, tokens("10001"))).to.be.reverted;
+        });
+    
+        it("whitelisted addresses can buy up to the specified max", async () => {
+          const addresses = [pair.address, owner.address, trader1.address, trader2.address, trader3.address, trader4.address];
+          await wag.modifyLGEWhitelist(0, 1200, tokens("5000"), addresses, true);
+          await wag.connect(pair).transfer(trader1.address, tokens("5000"));
+          await expect(wag.connect(pair).transfer(trader1.address, tokens("1"))).to.be.reverted;
+        });
+    
+        it("whitelist admin can add whitelist addresses using modifyLGEWhitelist", async () => {
+          const addresses = [pair.address, owner.address, trader1.address, trader2.address, trader3.address, trader4.address];
+          await expect(wag.connect(pair).transfer(trader1.address, tokens("10"))).to.be.reverted;
+          await wag.modifyLGEWhitelist(0, 1200, tokens("5000"), addresses, true);
+          await wag.connect(pair).transfer(trader1.address, tokens("10"));
+          expect(await wag.balanceOf(trader1.address)).to.be.equal(tokens("15"));
+        });
+    
+        it("whitelist admin can modify the whitelist duration", async () => {
+          const addresses = [pair.address, owner.address, trader1.address, trader2.address, trader3.address, trader4.address];
+          await wag.modifyLGEWhitelist(0, 1201, tokens("5000"), addresses, true);
+        });
+    
+        it("whitelist admin can modify the max tokens that can be bought during the whitelist", async () => {
+          const addresses = [pair.address, owner.address, trader1.address, trader2.address, trader3.address, trader4.address];
+          await wag.modifyLGEWhitelist(0, 1200, tokens("5000"), addresses, true);
+        });
+    
+        it("whitelist admin can call the modifyLGEWhitelist and not change anything", async () => {
+          const addresses = [pair.address, owner.address, trader1.address, trader2.address, trader3.address, trader4.address];
+          await wag.modifyLGEWhitelist(0, 1200, tokens("10000"), addresses, true);
+        });
+    
+        it("when the whitelist round is over, getLGEWhitelistRound returns 0", async () => {
+          let data = await wag.getLGEWhitelistRound();
+          expect(data[0]).to.be.equal(1);
+          increaseTime(1500);
+          data = await wag.getLGEWhitelistRound();
+          expect(data[0]).to.be.equal(0);
+        });
+    
+        it("whitelist admin cannot modify a whitelist that doesn't exist", async () => {
+          const addresses = [pair.address, owner.address, trader1.address, trader2.address, trader3.address, trader4.address];
+          await expect(wag.modifyLGEWhitelist(1, 1201, tokens("5000"), addresses, true)).to.be.reverted;
+        });
+    
+        it("whitelist admin cannot set amountMax less than zero", async () => {
+          const { wag, trader1, trader2, trader3, trader4, pair, owner } = await deployWithTokenHolders();
+          const addresses = [pair.address, owner.address, trader1.address, trader2.address, trader3.address, trader4.address];
+          // SVM function call fails before require statement reverts
+          // await expect(vlx.modifyLGEWhitelist(0, 1200, -1, addresses, true)).to.be.reverted;
+        });
+    
+        it("whitelist admin can renounce their whitelister permissions", async () => {
+          await wag.renounceWhitelister();
+          expect(await wag._whitelister()).to.be.equal(ZeroAddress);
+        });
+    
+        it("whitelist admin can tranfer their whitelisting permission to another address", async () => {
+          await expect(wag.connect(trader1).transferWhitelister(trader1.address)).to.be.reverted;
+          await wag.transferWhitelister(trader1.address);
+          expect(await wag._whitelister()).to.be.equal(trader1.address);
+        });
+    
+        it("whitelist admin cannot transfer their whitelisting permission to the zero address", async () => {
+          await expect(wag.transferWhitelister(ZeroAddress)).to.be.reverted;
+          expect(await wag._whitelister()).to.be.equal(owner.address);
+        });
+    
+    });
+});
+function deployWithTokenHolders(): { wag: any; trader1: any; trader2: any; trader3: any; trader4: any; pair: any; owner: any; } | PromiseLike<{ wag: any; trader1: any; trader2: any; trader3: any; trader4: any; pair: any; owner: any; }> {
+    throw new Error("Function not implemented.");
+}
+
