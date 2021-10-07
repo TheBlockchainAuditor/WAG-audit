@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { Snapshot, tokens, timeLimit, increaseTime, ether, ZeroAddress }  from "./helpers";
 
 // Types
-import { WAG, UniswapV2Router02, UniswapV2Factory, WETH9, UniswapV2ERC20 } from "../typechain";
+import { WAG, UniswapV2Router02, UniswapV2Factory, WETH9, UniswapV2Pair } from "../typechain";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers"; 
 import { BigNumber } from "ethers";
 import { ethers, upgrades } from "hardhat";
@@ -10,7 +10,7 @@ import { ethers, upgrades } from "hardhat";
 
 describe("Wagyu Swap ERC20 Contract Test Suite", () => {
     
-    let wag: WAG, factory: UniswapV2Factory, router: UniswapV2Router02, eth: WETH9, pair: UniswapV2ERC20;
+    let wag: WAG, factory: UniswapV2Factory, router: UniswapV2Router02, eth: WETH9, pair: UniswapV2Pair;
     let traders: SignerWithAddress[];
     let trader1: SignerWithAddress; 
     let trader2: SignerWithAddress; 
@@ -66,6 +66,11 @@ describe("Wagyu Swap ERC20 Contract Test Suite", () => {
             to: eth.address,
             value: ether("500")
         });
+        
+        let pairAddress: string = await factory.getPair(wag.address, eth.address);
+        pair = await ethers.getContractAt("UniswapV2Pair", pairAddress);
+
+        await wag.setPair(pair.address, true);
 
         let durations = [1200];
         let amountsMax = [tokens("10000"), tokens("10")];
@@ -73,16 +78,13 @@ describe("Wagyu Swap ERC20 Contract Test Suite", () => {
         durations = [];
         amountsMax = [];
     
-        await wag.createLGEWhitelist(ZeroAddress, durations, amountsMax);
+        await wag.createLGEWhitelist(pair.address, durations, amountsMax);
+        await wag.transfer(pair.address, tokens("10000"));
 
         await wag.approve(router.address, tokens("100000"));
         await eth.approve(router.address, ether("200"));
         await router.addLiquidity(wag.address, eth.address, tokens("100000"), ether("200"), 0, 0, owner.address, timeLimit(oneMinute*30));
 
-        let pairAddress: string = await factory.getPair(wag.address, eth.address);
-        pair = await ethers.getContractAt("UniswapV2ERC20", pairAddress);
-
-        await wag.setPair(pair.address, true);
 
         // Create the ADS, eth pool?
         await snapshot.snapshot();
@@ -245,7 +247,7 @@ describe("Wagyu Swap ERC20 Contract Test Suite", () => {
           durations = [];
           amountsMax = [];
     
-          await wag.createLGEWhitelist(ZeroAddress, durations, amountsMax);
+          await wag.createLGEWhitelist(ZeroAddress, durations, amountsMax); // shouldn't this revert since we're sending it the ZeroAddress?
         });
     
         it("transferring tokens to the pair address begins the LGE", async () => {
