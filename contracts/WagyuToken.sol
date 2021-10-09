@@ -195,11 +195,11 @@ contract WAG is IERC20, OwnableUpgradeSafe, LGEWhitelisted {
         return true;
     }
 
-    // Helper function to access _burn function
-    function burn(uint256 amount) public virtual returns (bool) {
-        _burn(_msgSender(), amount);
-        return true;
-    }
+    // // Helper function to access _burn function
+    // function burn(uint256 amount) public virtual returns (bool) {
+    //     _burn(_msgSender(), amount);
+    //     return true;
+    // }
 
     function _mint(address account, uint256 amount) internal virtual {
         require(account != address(0), "ERC20: mint to the zero address");
